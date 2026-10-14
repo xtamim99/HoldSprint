@@ -22,7 +22,7 @@ public final class HoldSprintClient implements ClientModInitializer {
         }
 
         // Don't keep sprinting while a menu/chat screen is open.
-        boolean sprintHeld = client.screen == null && client.options.keySprint.isDown();
+        boolean sprintHeld = client.options.keySprint.isDown();
         player.setSprinting(sprintHeld);
     }
 }
