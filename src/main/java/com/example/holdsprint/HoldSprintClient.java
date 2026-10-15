@@ -39,7 +39,7 @@ public final class HoldSprintClient implements ClientModInitializer {
             }
 
             LocalPlayer player = client.player;
-            if (player == null || client.screen != null) {
+            if (player == null) {
                 return;
             }
 
