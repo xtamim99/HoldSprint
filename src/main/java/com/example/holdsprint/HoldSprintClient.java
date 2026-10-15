@@ -10,7 +10,6 @@ import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.options.controls.ControlsScreen;
 import net.minecraft.client.player.LocalPlayer;
@@ -40,22 +39,21 @@ public final class HoldSprintClient implements ClientModInitializer {
             }
 
             LocalPlayer player = client.player;
-            if (player == null) {
+            if (player == null || client.screen != null) {
                 return;
             }
 
-            // Get the currently configured sprint key.
             InputConstants.Key sprintKey =
                     KeyMappingHelper.getBoundKeyOf(
                             client.options.keySprint
                     );
 
-            // Check whether the physical key is held down.
             boolean physicallyHeld =
-                    InputConstants.isKeyDown(
-                            client.getWindow(),
-                            sprintKey.getValue()
-                    );
+                    sprintKey.getType() == InputConstants.Type.KEYSYM
+                            && InputConstants.isKeyDown(
+                                    client.getWindow(),
+                                    sprintKey.getValue()
+                            );
 
             player.setSprinting(physicallyHeld);
         });
@@ -75,12 +73,11 @@ public final class HoldSprintClient implements ClientModInitializer {
                             }
                     ).bounds(
                             width / 2 - 100,
-                            height - 52,
+                            height - 76,
                             200,
                             20
                     ).build();
 
-                    // Add the button through Fabric's screen API.
                     Screens.getWidgets(screen).add(button);
                 }
         );
