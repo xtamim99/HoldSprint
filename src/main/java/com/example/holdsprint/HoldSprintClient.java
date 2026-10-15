@@ -6,13 +6,15 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.options.controls.ControlsScreen;
-import net.minecraft.network.chat.Component;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -21,14 +23,17 @@ import java.util.Properties;
 
 @Environment(EnvType.CLIENT)
 public final class HoldSprintClient implements ClientModInitializer {
+
     private static final Path CONFIG_FILE =
-            FabricLoader.getInstance().getConfigDir()
+            FabricLoader.getInstance()
+                    .getConfigDir()
                     .resolve("hold_sprint.properties");
 
     private static boolean trueHoldEnabled = loadEnabled();
 
     @Override
     public void onInitializeClient() {
+
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (!trueHoldEnabled) {
                 return;
@@ -39,42 +44,52 @@ public final class HoldSprintClient implements ClientModInitializer {
                 return;
             }
 
-            // Read the actual physical key state, not the
-            // potentially toggled state of Minecraft's key mapping.
-            int keyCode = client.options.keySprint.getKey().getValue();
+            // Get the currently configured sprint key.
+            InputConstants.Key sprintKey =
+                    KeyMappingHelper.getBoundKeyOf(
+                            client.options.keySprint
+                    );
+
+            // Check whether the physical key is held down.
             boolean physicallyHeld =
-                    InputConstants.isKeyDown(keyCode);
+                    InputConstants.isKeyDown(
+                            client.getWindow(),
+                            sprintKey.getValue()
+                    );
 
             player.setSprinting(physicallyHeld);
         });
 
         ScreenEvents.AFTER_INIT.register(
                 (client, screen, width, height) -> {
-                    if (screen instanceof ControlsScreen) {
-                        Button button = Button.builder(
-                                buttonText(),
-                                clicked -> {
-                                    trueHoldEnabled = !trueHoldEnabled;
-                                    saveEnabled();
-                                    clicked.setMessage(buttonText());
-                                }
-                        ).bounds(
-                                width / 2 - 100,
-                                height - 52,
-                                200,
-                                20
-                        ).build();
-
-                        // Register it as a real screen button.
-                        screen.addRenderableWidget(button);
+                    if (!(screen instanceof ControlsScreen)) {
+                        return;
                     }
+
+                    Button button = Button.builder(
+                            buttonText(),
+                            clicked -> {
+                                trueHoldEnabled = !trueHoldEnabled;
+                                saveEnabled();
+                                clicked.setMessage(buttonText());
+                            }
+                    ).bounds(
+                            width / 2 - 100,
+                            height - 52,
+                            200,
+                            20
+                    ).build();
+
+                    // Add the button through Fabric's screen API.
+                    Screens.getWidgets(screen).add(button);
                 }
         );
     }
 
     private static Component buttonText() {
         return Component.literal(
-                "True Hold: " + (trueHoldEnabled ? "ON" : "OFF")
+                "True Hold: " +
+                (trueHoldEnabled ? "ON" : "OFF")
         );
     }
 
@@ -83,9 +98,11 @@ public final class HoldSprintClient implements ClientModInitializer {
 
         try {
             if (Files.exists(CONFIG_FILE)) {
-                try (var reader = Files.newBufferedReader(CONFIG_FILE)) {
+                try (var reader =
+                             Files.newBufferedReader(CONFIG_FILE)) {
                     properties.load(reader);
                 }
+
                 return Boolean.parseBoolean(
                         properties.getProperty("enabled", "true")
                 );
@@ -106,8 +123,13 @@ public final class HoldSprintClient implements ClientModInitializer {
 
         try {
             Files.createDirectories(CONFIG_FILE.getParent());
-            try (var writer = Files.newBufferedWriter(CONFIG_FILE)) {
-                properties.store(writer, "HoldSprint settings");
+
+            try (var writer =
+                         Files.newBufferedWriter(CONFIG_FILE)) {
+                properties.store(
+                        writer,
+                        "HoldSprint settings"
+                );
             }
         } catch (IOException exception) {
             exception.printStackTrace();
