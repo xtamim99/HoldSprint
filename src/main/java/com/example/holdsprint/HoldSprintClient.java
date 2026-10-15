@@ -8,6 +8,7 @@ import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.components.Button;
@@ -33,6 +34,7 @@ public final class HoldSprintClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
 
+        // Apply True Hold while playing.
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (!trueHoldEnabled) {
                 return;
@@ -50,35 +52,58 @@ public final class HoldSprintClient implements ClientModInitializer {
 
             boolean physicallyHeld =
                     sprintKey.getType() == InputConstants.Type.KEYSYM
-                            && InputConstants.isKeyDown(
-                                    client.getWindow(),
-                                    sprintKey.getValue()
-                            );
+                    && InputConstants.isKeyDown(
+                            client.getWindow(),
+                            sprintKey.getValue()
+                    );
 
             player.setSprinting(physicallyHeld);
         });
 
+        // Add the button and register a direct mouse-click listener.
         ScreenEvents.AFTER_INIT.register(
                 (client, screen, width, height) -> {
                     if (!(screen instanceof ControlsScreen)) {
                         return;
                     }
 
+                    final int buttonX = width / 2 - 100;
+                    final int buttonY = height - 110;
+                    final int buttonWidth = 200;
+                    final int buttonHeight = 20;
+
                     Button button = Button.builder(
                             buttonText(),
                             clicked -> {
-                                trueHoldEnabled = !trueHoldEnabled;
-                                saveEnabled();
-                                clicked.setMessage(buttonText());
+                                // The mouse listener below
+                                // performs the toggle.
                             }
                     ).bounds(
-                            width / 2 - 100,
-                            height - 76,
-                            200,
-                            20
+                            buttonX,
+                            buttonY,
+                            buttonWidth,
+                            buttonHeight
                     ).build();
 
                     Screens.getWidgets(screen).add(button);
+
+                    ScreenMouseEvents.afterMouseClick(screen).register(
+                            (clickedScreen, event, consumed) -> {
+                                boolean insideButton =
+                                        event.x() >= buttonX
+                                        && event.x() < buttonX + buttonWidth
+                                        && event.y() >= buttonY
+                                        && event.y() < buttonY + buttonHeight;
+
+                                if (event.button() == 0 && insideButton) {
+                                    trueHoldEnabled = !trueHoldEnabled;
+                                    saveEnabled();
+                                    button.setMessage(buttonText());
+                                }
+
+                                return consumed;
+                            }
+                    );
                 }
         );
     }
