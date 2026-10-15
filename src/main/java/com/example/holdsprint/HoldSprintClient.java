@@ -1,10 +1,12 @@
 
 package com.example.holdsprint;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
-import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
@@ -13,35 +15,48 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.client.player.LocalPlayer;
 
 import java.io.IOException;
-import java.io.Reader;
-import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
 
+@Environment(EnvType.CLIENT)
 public final class HoldSprintClient implements ClientModInitializer {
     private static final Path CONFIG_FILE =
             FabricLoader.getInstance().getConfigDir()
                     .resolve("hold_sprint.properties");
 
-    // Keep the existing behavior enabled by default.
     private static boolean trueHoldEnabled = loadEnabled();
 
     @Override
     public void onInitializeClient() {
-        ClientTickEvents.END_CLIENT_TICK.register(
-                HoldSprintClient::onEndClientTick
-        );
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (!trueHoldEnabled) {
+                return;
+            }
+
+            LocalPlayer player = client.player;
+            if (player == null) {
+                return;
+            }
+
+            // Read the actual physical key state, not the
+            // potentially toggled state of Minecraft's key mapping.
+            int keyCode = client.options.keySprint.getKey().getValue();
+            boolean physicallyHeld =
+                    InputConstants.isKeyDown(keyCode);
+
+            player.setSprinting(physicallyHeld);
+        });
 
         ScreenEvents.AFTER_INIT.register(
                 (client, screen, width, height) -> {
                     if (screen instanceof ControlsScreen) {
                         Button button = Button.builder(
-                                getButtonText(),
+                                buttonText(),
                                 clicked -> {
                                     trueHoldEnabled = !trueHoldEnabled;
                                     saveEnabled();
-                                    clicked.setMessage(getButtonText());
+                                    clicked.setMessage(buttonText());
                                 }
                         ).bounds(
                                 width / 2 - 100,
@@ -50,44 +65,33 @@ public final class HoldSprintClient implements ClientModInitializer {
                                 20
                         ).build();
 
-                        Screens.getWidgets(screen).add(button);
+                        // Register it as a real screen button.
+                        screen.addRenderableWidget(button);
                     }
                 }
         );
     }
 
-    private static Component getButtonText() {
+    private static Component buttonText() {
         return Component.literal(
                 "True Hold: " + (trueHoldEnabled ? "ON" : "OFF")
         );
     }
 
-    private static void onEndClientTick(Minecraft client) {
-        if (!trueHoldEnabled) {
-            return;
-        }
-
-        LocalPlayer player = client.player;
-        if (player == null) {
-            return;
-        }
-
-        boolean sprintHeld = client.options.keySprint.isDown();
-        player.setSprinting(sprintHeld);
-    }
-
     private static boolean loadEnabled() {
         Properties properties = new Properties();
 
-        if (Files.exists(CONFIG_FILE)) {
-            try (Reader reader = Files.newBufferedReader(CONFIG_FILE)) {
-                properties.load(reader);
+        try {
+            if (Files.exists(CONFIG_FILE)) {
+                try (var reader = Files.newBufferedReader(CONFIG_FILE)) {
+                    properties.load(reader);
+                }
                 return Boolean.parseBoolean(
                         properties.getProperty("enabled", "true")
                 );
-            } catch (IOException ignored) {
-                // Use the default if the config cannot be read.
             }
+        } catch (IOException exception) {
+            exception.printStackTrace();
         }
 
         return true;
@@ -102,7 +106,7 @@ public final class HoldSprintClient implements ClientModInitializer {
 
         try {
             Files.createDirectories(CONFIG_FILE.getParent());
-            try (Writer writer = Files.newBufferedWriter(CONFIG_FILE)) {
+            try (var writer = Files.newBufferedWriter(CONFIG_FILE)) {
                 properties.store(writer, "HoldSprint settings");
             }
         } catch (IOException exception) {
